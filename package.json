@@ -1,0 +1,18 @@
+{
+      "name": "file-chunker",
+      "version": "1.0.0",
+      "type": "module",
+      "scripts": {
+            "dev": "vite",
+            "build": "vite build",
+            "preview": "vite preview"
+      },
+      "dependencies": {
+            "mammoth": "^1.4.19",
+            "pdf-parse": "^1.1.1",
+            "turndown": "^7.1.1"
+      },
+      "devDependencies": {
+            "vite": "^4.5.5"
+      }
+}
