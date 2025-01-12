@@ -1,5 +1,114 @@
-// ... existing function definitions remain the same ...
+// Utility functions
+    const readFile = async (file) => {
+      if (file.type === 'application/pdf') {
+        const pdf = await import('pdf-parse')
+        const data = await pdf.default(file)
+        return data.text
+      }
+      else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const mammoth = await import('mammoth')
+        const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })
+        return result.value
+      }
+      else if (file.type === 'text/html') {
+        const turndown = await import('turndown')
+        const td = new turndown.default()
+        return td.turndown(await file.text())
+      }
+      else {
+        return await file.text()
+      }
+    }
 
+    const chunkContent = (content, chunkSize, crossover) => {
+      const words = content.split(/\s+/)
+      const chunks = []
+      let currentChunk = []
+      let start = 0
+      
+      while (start < words.length) {
+        const end = Math.min(start + chunkSize, words.length)
+        const chunkWords = words.slice(start, end)
+        
+        const metadata = {
+          chunkNumber: chunks.length + 1,
+          totalChunks: Math.ceil((words.length - start) / (chunkSize - crossover)),
+          tokenCount: chunkWords.length,
+          startToken: start,
+          endToken: end - 1
+        }
+        
+        currentChunk = [
+          formatMetadata(metadata),
+          chunkWords.join(' ')
+        ].join('\n\n')
+        
+        chunks.push(currentChunk)
+        start += (chunkSize - crossover)
+      }
+      
+      return chunks
+    }
+
+    const formatMetadata = (metadata) => {
+      return `# Chunk ${metadata.chunkNumber}/${metadata.totalChunks}
+Tokens: ${metadata.tokenCount}
+Position: ${metadata.startToken}-${metadata.endToken}
+`
+    }
+
+    const saveChunks = (chunks, filename, format, prefix) => {
+      const output = document.getElementById('output')
+      const baseName = prefix || filename.replace(/\.[^/.]+$/, '')
+      
+      chunks.forEach((chunk, index) => {
+        const content = format === 'json' ? 
+          JSON.stringify({ 
+            metadata: extractMetadata(chunk),
+            content: chunk.split('\n\n').slice(1).join('\n\n')
+          }) : 
+          chunk
+        
+        const blob = new Blob([content], 
+          { type: format === 'json' ? 'application/json' : `text/${format}` })
+        const url = URL.createObjectURL(blob)
+        
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${baseName}_chunk_${index + 1}.${format}`
+        link.textContent = `Download ${link.download}`
+        link.className = 'download-link'
+        output.appendChild(link)
+        output.appendChild(document.createElement('br'))
+      })
+    }
+
+    const extractMetadata = (chunk) => {
+      const lines = chunk.split('\n')
+      return {
+        chunkNumber: lines[0].match(/\d+/g)[0],
+        totalChunks: lines[0].match(/\d+/g)[1],
+        tokenCount: lines[1].match(/\d+/)[0],
+        position: lines[2].match(/\d+/g)
+      }
+    }
+
+    // Main processing function
+    const processFiles = async () => {
+      const files = document.getElementById('fileInput').files
+      const format = document.getElementById('formatSelect').value
+      const chunkSize = parseInt(document.getElementById('chunkSize').value)
+      const crossover = parseInt(document.getElementById('crossover').value)
+      const outputPrefix = document.getElementById('outputPrefix').value.trim()
+      
+      for (const file of files) {
+        const content = await readFile(file)
+        const chunks = chunkContent(content, chunkSize, crossover)
+        saveChunks(chunks, file.name, format, outputPrefix)
+      }
+    }
+
+    // App creation
     export function createApp() {
       const app = document.createElement('div')
       app.innerHTML = `
@@ -52,45 +161,3 @@
       app.querySelector('#processBtn').addEventListener('click', processFiles)
       return app
     }
-
-    const processFiles = async () => {
-      const files = document.getElementById('fileInput').files
-      const format = document.getElementById('formatSelect').value
-      const chunkSize = parseInt(document.getElementById('chunkSize').value)
-      const crossover = parseInt(document.getElementById('crossover').value)
-      const outputPrefix = document.getElementById('outputPrefix').value.trim()
-      
-      for (const file of files) {
-        const content = await readFile(file)
-        const chunks = chunkContent(content, chunkSize, crossover)
-        saveChunks(chunks, file.name, format, outputPrefix)
-      }
-    }
-
-    const saveChunks = (chunks, filename, format, prefix) => {
-      const output = document.getElementById('output')
-      const baseName = prefix || filename.replace(/\.[^/.]+$/, '')
-      
-      chunks.forEach((chunk, index) => {
-        const content = format === 'json' ? 
-          JSON.stringify({ 
-            metadata: extractMetadata(chunk),
-            content: chunk.split('\n\n').slice(1).join('\n\n')
-          }) : 
-          chunk
-        
-        const blob = new Blob([content], 
-          { type: format === 'json' ? 'application/json' : `text/${format}` })
-        const url = URL.createObjectURL(blob)
-        
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${baseName}_chunk_${index + 1}.${format}`
-        link.textContent = `Download ${link.download}`
-        link.className = 'download-link'
-        output.appendChild(link)
-        output.appendChild(document.createElement('br'))
-      })
-    }
-
-    // ... rest of the functions remain the same ...
